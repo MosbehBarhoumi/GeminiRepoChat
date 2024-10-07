@@ -1,4 +1,4 @@
-# GitChat
+# RepoChat
 
 ## Overview
 
