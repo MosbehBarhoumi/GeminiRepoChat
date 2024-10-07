@@ -61,10 +61,6 @@ This Flask application allows users to fetch code from GitHub repositories and i
 
 4. Click the submit button to fetch the relevant code chunks and get a response from the Gemini API.
 
-## Rate Limiting
-
-The application limits unauthenticated users to **60 requests per hour**. If the limit is exceeded, an error message will be displayed.
-
 ## Caching
 
 Fetched repository content is cached to improve performance and reduce the number of API calls. Cached content is stored in the `./cache` directory.
