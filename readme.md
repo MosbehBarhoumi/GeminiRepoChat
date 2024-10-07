@@ -1,8 +1,4 @@
-Creating a well-structured README file for your Flask application can help users understand how to use it, what it does, and how to contribute. Here's a suggested outline and content for your README:
-
----
-
-# GitHub to TXT Converter & Gemini Chat
+# GitChat
 
 ## Overview
 
@@ -10,7 +6,6 @@ This Flask application allows users to fetch code from GitHub repositories and i
 
 ## Features
 
-- **Rate Limiting**: Protects the application from excessive requests.
 - **Code Fetching**: Fetches and caches code from specified GitHub repositories.
 - **Filtering Options**: Allows users to include or exclude specific file extensions and filter code content.
 - **Relevant Code Extraction**: Uses sentence transformers to extract the most relevant code snippets based on user queries.
@@ -74,17 +69,3 @@ The application limits unauthenticated users to **60 requests per hour**. If the
 
 Fetched repository content is cached to improve performance and reduce the number of API calls. Cached content is stored in the `./cache` directory.
 
-## Contributing
-
-1. Fork the repository.
-2. Create a new branch for your feature or bug fix.
-3. Make your changes and commit them.
-4. Push your branch and create a pull request.
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
----
-
-Feel free to modify this template to fit your application's specifics!
