@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub to TXT Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+        }
+        input[type="text"], input[type="password"] {
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        input[type="submit"] {
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        input[type="submit"]:hover {
+            background-color: #45a049;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+        .help-text {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: -5px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GitHub to TXT Converter</h1>
+        <form method="POST">
+            <input type="text" name="repo_url" placeholder="Enter GitHub repository URL" required>
+            <input type="password" name="github_token" placeholder="GitHub token (optional for public repos)">
+            <input type="text" name="include_extensions" placeholder="Include file extensions (e.g., .py,.js,.md)">
+            <p class="help-text">Comma-separated list of file extensions to include. Leave blank to include all.</p>
+            <input type="text" name="exclude_extensions" placeholder="Exclude file extensions (e.g., .pkl,.bin)">
+            <p class="help-text">Comma-separated list of file extensions to exclude.</p>
+            <input type="text" name="content_filter" placeholder="Content filter (optional)">
+            <p class="help-text">Only include files containing this text (case-insensitive).</p>
+            <input type="submit" value="Convert and Download">
+        </form>
+        {% if error %}
+        <p class="error">{{ error }}</p>
+        {% endif %}
+    </div>
+</body>
+</html>

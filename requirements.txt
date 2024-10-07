@@ -1,0 +1,8 @@
+flask
+PyGithub
+requests
+nltk==3.8.1
+sentence-transformers
+faiss-cpu
+transformers 
+torch
