@@ -96,6 +96,39 @@
             border-left: 5px solid #007BFF;
         }
 
+        .chat-history {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f1f1f1;
+            border-radius: 8px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+
+        .chat-message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .user-message {
+            background-color: #e6f2ff;
+            border-left: 5px solid #007BFF;
+        }
+
+        .assistant-message {
+            background-color: #f0f0f0;
+            border-left: 5px solid #28a745;
+        }
+
+        .followup-form {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+
         @media (max-width: 768px) {
             h1 {
                 font-size: 2rem;
@@ -142,8 +175,25 @@
         {% endif %}
 
         {% if gemini_response %}
-        <h2>Gemini Response:</h2>
-        <div class="response">{{ gemini_response }}</div>
+        <h2>Chat History:</h2>
+        <div class="chat-history">
+            {% for message in session.get('chat_history', []) %}
+                <div class="chat-message {% if message.role == 'user' %}user-message{% else %}assistant-message{% endif %}">
+                    <strong>{{ message.role|capitalize }}:</strong> {{ message.content }}
+                </div>
+            {% endfor %}
+        </div>
+
+        {% if show_followup %}
+        <div class="followup-form">
+            <h3>Ask a follow-up question:</h3>
+            <form method="POST">
+                <label for="followup_question">Your follow-up question:</label>
+                <textarea id="followup_question" name="followup_question" rows="4" required></textarea>
+                <input type="submit" value="Send Follow-up Question">
+            </form>
+        </div>
+        {% endif %}
         {% endif %}
     </div>
 </body>
