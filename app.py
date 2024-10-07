@@ -9,6 +9,9 @@ from functools import wraps
 import os
 import json
 import hashlib
+import google.generativeai as genai
+from sentence_transformers import SentenceTransformer, util
+import numpy as np
 
 app = Flask(__name__)
 
@@ -62,6 +65,9 @@ class RepoCache:
             f.write(content)
 
 repo_cache = RepoCache()
+
+# Load a pre-trained sentence transformer model
+model_transformer = SentenceTransformer('all-MiniLM-L6-v2')
 
 def fetch_repo_contents(repo_url, token=None, include_extensions=None, exclude_extensions=None, content_filter=None):
     cache_key = repo_cache.get_cache_key(repo_url, include_extensions, exclude_extensions, content_filter)
@@ -120,27 +126,74 @@ def fetch_repo_contents(repo_url, token=None, include_extensions=None, exclude_e
     repo_cache.set_cached_content(cache_key, content)
     return content
 
+# Step 1: Split the content into smaller chunks
+def split_content_into_chunks(content, chunk_size=1000):
+    return [content[i:i + chunk_size] for i in range(0, len(content), chunk_size)]
+
+# Step 2: Embed the chunks and the user's question
+def embed_chunks_and_question(chunks, question):
+    chunk_embeddings = model_transformer.encode(chunks, convert_to_tensor=True)
+    question_embedding = model_transformer.encode(question, convert_to_tensor=True)
+    return chunk_embeddings, question_embedding
+
+# Step 3: Get the top-k most similar chunks
+def get_top_k_similar_chunks(chunk_embeddings, question_embedding, chunks, top_k=3):
+    similarities = util.pytorch_cos_sim(question_embedding, chunk_embeddings)[0]
+    top_k_indices = similarities.topk(k=top_k).indices
+    top_chunks = [chunks[idx] for idx in top_k_indices]
+    return top_chunks
+
+# Function to get relevant chunks based on user’s prompt
+def get_relevant_code_chunks(content, user_question):
+    chunks = split_content_into_chunks(content)
+    chunk_embeddings, question_embedding = embed_chunks_and_question(chunks, user_question)
+    top_chunks = get_top_k_similar_chunks(chunk_embeddings, question_embedding, chunks)
+    return top_chunks
+
+# Gemini API configuration
+def initialize_model(api_key, model_name="gemini-pro"):
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel(model_name)
+
+def get_chat_response(model, prompt):
+    chat = model.start_chat(history=[])
+    response = chat.send_message(prompt)
+    return response.text
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        repo_url = request.form['repo_url']
-        token = request.form.get('github_token')
-        include_extensions = request.form.get('include_extensions')
-        exclude_extensions = request.form.get('exclude_extensions')
-        content_filter = request.form.get('content_filter')
-        try:
-            if token:
-                content = fetch_repo_contents(repo_url, token, include_extensions, exclude_extensions, content_filter)
-            else:
-                content = rate_limited(fetch_repo_contents)(repo_url, None, include_extensions, exclude_extensions, content_filter)
-            
-            with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.txt') as temp_file:
-                temp_file.write(content)
-            
-            return send_file(temp_file.name, as_attachment=True, download_name='repo_contents.txt')
-        except Exception as e:
-            error_message = f"An error occurred: {str(e)}"
-            return render_template('index.html', error=error_message)
+        if 'repo_url' in request.form:
+            # GitHub repo fetching logic
+            repo_url = request.form['repo_url']
+            token = request.form.get('github_token')
+            include_extensions = request.form.get('include_extensions')
+            exclude_extensions = request.form.get('exclude_extensions')
+            content_filter = request.form.get('content_filter')
+            user_prompt = request.form.get('gemini_prompt')
+            api_key = request.form.get('gemini_api_key')
+            try:
+                # Fetch repository contents
+                if token:
+                    content = fetch_repo_contents(repo_url, token, include_extensions, exclude_extensions, content_filter)
+                else:
+                    content = rate_limited(fetch_repo_contents)(repo_url, None, include_extensions, exclude_extensions, content_filter)
+
+                # Get the relevant code chunks
+                relevant_chunks = get_relevant_code_chunks(content, user_prompt)
+
+                # Prepare the final prompt
+                final_prompt = f"Here are the most relevant parts of the code:\n\n{''.join(relevant_chunks)}\n\nUser's question: {user_prompt}"
+
+                # Send to Gemini API
+                model = initialize_model(api_key)
+                gemini_response = get_chat_response(model, final_prompt)
+
+                # Pass the relevant chunks to the template
+                return render_template('index.html', gemini_response=gemini_response, relevant_chunks=relevant_chunks)
+            except Exception as e:
+                error_message = f"An error occurred: {str(e)}"
+                return render_template('index.html', error=error_message)
     
     return render_template('index.html')
 

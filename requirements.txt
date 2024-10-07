@@ -4,5 +4,6 @@ requests
 nltk==3.8.1
 sentence-transformers
 faiss-cpu
-transformers 
+transformers
 torch
+google-generativeai
