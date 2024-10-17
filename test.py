@@ -12,32 +12,24 @@ from dotenv import load_dotenv
 import ast
 from pythonchunkextractor import PythonChunkExtractor, split_python_content
 
-
-# Load environment variables
 load_dotenv()
 
-# Gemini API configuration
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 
-# Determine the device to use for PyTorch
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Initialize SentenceTransformer model
 @st.cache_resource
 def load_sentence_transformer():
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    model = model.to(device)  # Explicitly move the model to the desired device
+    model = SentenceTransformer('all-MiniLM-L6-v2').to(device)
     return model
 
-model_transformer = load_sentence_transformer()
-
-# Initialize Gemini model
 @st.cache_resource
 def initialize_gemini_model():
     genai.configure(api_key=GOOGLE_API_KEY)
     return genai.GenerativeModel('gemini-pro')
 
+model_transformer = load_sentence_transformer()
 gemini_model = initialize_gemini_model()
 
 # Repository content caching
@@ -63,7 +55,10 @@ class RepoCache:
         with open(cache_file, 'w') as f:
             f.write(content)
 
+
+
 repo_cache = RepoCache()
+
 
 # Fetch repository contents from GitHub API
 def fetch_repo_contents(repo_url, token=None, include_extensions=None, exclude_extensions=None, content_filter=None):
@@ -129,55 +124,6 @@ def fetch_repo_contents(repo_url, token=None, include_extensions=None, exclude_e
     repo_cache.set_cached_content(cache_key, content)
     return content
 
-# Split repository content into chunks based on file type
-def split_content_into_smart_chunks(content):
-    chunks = []
-    files = content.split('=' * 80)
-
-    for file in files:
-        if not file.strip():
-            continue
-
-        file_name, file_content = file.split('\n\n', 1)
-        file_name = file_name.replace('File: ', '').strip()
-        _, file_extension = os.path.splitext(file_name)
-
-        if file_extension.lower() == '.py':
-            chunks.extend(split_python_content(file_name, file_content))
-        else:
-            # Use existing logic for non-Python files
-            chunks.extend(split_text_file(file_name, file_content))
-
-    return chunks
-
-# Split code files into chunks based on functions and classes
-def split_code_file(file_name, content):
-    chunks = []
-
-    if file_name.endswith('.py'):
-        try:
-            tree = ast.parse(content)
-            for node in ast.walk(tree):
-                if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
-                    chunk = ast.get_source_segment(content, node)
-                    chunks.append(f"File: {file_name}\n\n{chunk}")
-        except SyntaxError:
-            # If parsing fails, fall back to text-based splitting
-            chunks.extend(split_text_file(file_name, content))
-    else:
-        # For other languages, use regex-based splitting
-        # This is a simple example and might need refinement for specific languages
-        function_class_pattern = re.compile(r'((?:public|private|protected|static|\s) +[\w\<\>\[\]]+\s+(\w+) *\([^\)]*\) *\{?|class +(\w+))')
-        matches = list(function_class_pattern.finditer(content))
-
-        for i, match in enumerate(matches):
-            start = match.start()
-            end = matches[i+1].start() if i+1 < len(matches) else len(content)
-            chunk = content[start:end].strip()
-            chunks.append(f"File: {file_name}\n\n{chunk}")
-
-    return chunks
-
 # Split text files into chunks based on line length
 def split_text_file(file_name, content):
     chunks = []
@@ -199,7 +145,28 @@ def split_text_file(file_name, content):
 
     return chunks
 
-# Embed chunks and question using SentenceTransformer model
+
+# Split repository content into chunks based on file type
+def split_content_into_smart_chunks(content):
+    chunks = []
+    files = content.split('=' * 80)
+
+    for file in files:
+        if not file.strip():
+            continue
+
+        file_name, file_content = file.split('\n\n', 1)
+        file_name = file_name.replace('File: ', '').strip()
+        _, file_extension = os.path.splitext(file_name)
+
+        if file_extension.lower() == '.py':
+            chunks.extend(split_python_content(file_name, file_content))
+        else:
+            # Use existing logic for non-Python files
+            chunks.extend(split_text_file(file_name, file_content))
+
+    return chunks
+
 def embed_chunks_and_question(chunks, question):
     if not chunks:
         return None, None
@@ -220,6 +187,7 @@ def get_top_k_similar_chunks(chunk_embeddings, question_embedding, chunks, top_k
     top_k_indices = similarities.argsort(descending=True)[:top_k]
     top_chunks = [chunks[idx] for idx in top_k_indices.cpu().numpy()]
     return top_chunks
+
 
 # Generate a refined version of the user's question using the Gemini AI model
 def get_refined_prompt(model, initial_prompt):
@@ -265,7 +233,6 @@ def parse_refined_prompt(refined_prompt):
 
     return refined_question, keywords, '\n'.join(pseudo_code)
 
-# Retrieve relevant code chunks based on the refined question and keywords
 def get_relevant_code_chunks(content, user_question, refined_question, keywords):
     chunks = split_content_into_smart_chunks(content)
     if not chunks:
@@ -325,23 +292,19 @@ def verify_response_relevance(response, relevant_chunks):
     
     return len(matching_words) > 0  # Return True if there's significant overlap
 
-# Modified function
 def main():
     st.title("GitHub Repository Chat with Gemini AI")
 
-    # Initialize session state for repository content if it doesn't exist
     if "repo_content" not in st.session_state:
         st.session_state.repo_content = None
 
-    # Sidebar for repository information
     st.sidebar.header("Repository Information")
-    repo_url = st.sidebar.text_input("GitHub Repository URL", key="repo_url_input")
-    include_extensions = st.sidebar.text_input("Include Extensions (comma-separated)", "py,md,txt", key="include_extensions_input")
-    exclude_extensions = st.sidebar.text_input("Exclude Extensions (comma-separated)", "gitignore", key="exclude_extensions_input")
-    content_filter = st.sidebar.text_input("Content Filter (optional)", key="content_filter_input")
+    repo_url = st.sidebar.text_input("GitHub Repository URL")
+    include_extensions = st.sidebar.text_input("Include Extensions", "py,md,txt")
+    exclude_extensions = st.sidebar.text_input("Exclude Extensions", "gitignore")
+    content_filter = st.sidebar.text_input("Content Filter (optional)")
 
-    # Fetch repository contents when the "Fetch Repository" button is clicked
-    if st.sidebar.button("Fetch Repository", key="fetch_repo_button"):
+    if st.sidebar.button("Fetch Repository"):
         if repo_url:
             with st.spinner("Fetching repository contents..."):
                 try:
@@ -352,19 +315,15 @@ def main():
         else:
             st.warning("Please enter a GitHub repository URL.")
 
-    # Main chat interface
     st.header("Chat with the Repository")
 
-    # Initialize chat history if it doesn't exist
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display chat messages from history on app rerun
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Get user question and display it in the chat
     if question := st.chat_input("Ask a question about the repository"):
         st.session_state.messages.append({"role": "user", "content": question})
         with st.chat_message("user"):
@@ -372,33 +331,26 @@ def main():
 
         if st.session_state.repo_content:
             with st.spinner("Analyzing repository and generating response..."):
-                # Refine the user's question using the Gemini AI model
                 refined_prompt = get_refined_prompt(gemini_model, question)
                 refined_question, keywords, pseudo_code = parse_refined_prompt(refined_prompt)
 
-                # Display the refined question and keywords
                 st.subheader("Question Refinement")
                 st.write(f"Refined Question: {refined_question}")
                 st.write(f"Keywords: {', '.join(keywords)}")
                 if pseudo_code:
                     st.code(pseudo_code, language="python")
 
-                # Get relevant code chunks based on the refined question and keywords
                 relevant_chunks = get_relevant_code_chunks(st.session_state.repo_content, question, refined_question, keywords)
 
-                # Display the relevant chunks
                 st.subheader("Relevant Code Chunks")
                 for i, chunk in enumerate(relevant_chunks, 1):
                     st.text_area(f"Chunk {i}", chunk, height=150)
 
-                # Generate a chat response using the Gemini AI model, refined question, and relevant chunks
                 chat_response = get_chat_response(gemini_model, refined_question, relevant_chunks)
                 
-                # Display the raw chat response
                 st.subheader("Raw AI Response")
                 st.text_area("Raw Response", chat_response, height=200)
 
-                # Verify response relevance
                 is_relevant = verify_response_relevance(chat_response, relevant_chunks)
                 st.write(f"Response deemed relevant: {is_relevant}")
 
@@ -406,16 +358,12 @@ def main():
                     st.session_state.messages.append({"role": "assistant", "content": chat_response})
                     st.chat_message("assistant").markdown(chat_response)
                 else:
-                    warning_message = ("I apologize, but I couldn't find relevant information in the repository "
-                                       "to answer your question. The response generated may not be based on the "
-                                       "repository content. Could you please rephrase your question or ask about "
-                                       "something specific to the code in this repository?")
+                    warning_message = "I apologize, but I couldn't find relevant information in the repository to answer your question. Could you please rephrase your question or ask about something specific to the code in this repository?"
                     st.session_state.messages.append({"role": "assistant", "content": warning_message})
                     st.chat_message("assistant").warning(warning_message)
         else:
             st.warning("Please fetch a repository first before asking questions.")
 
-    # Add a footer to the application
     st.sidebar.write("Chatbot powered by Gemini AI")
 
 if __name__ == "__main__":
