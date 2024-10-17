@@ -51,13 +51,13 @@ class RepoCache:
         cache_file = os.path.join(self.cache_dir, f"{cache_key}.txt")
         if os.path.exists(cache_file):
             with open(cache_file, 'r') as f:
-                return f.read()
+                return eval(f.read())  # Safely evaluate the stored list of tuples
         return None
 
     def set_cached_content(self, cache_key, content):
         cache_file = os.path.join(self.cache_dir, f"{cache_key}.txt")
         with open(cache_file, 'w') as f:
-            f.write(content)
+            f.write(repr(content))  # Store the list of tuples as a string representation
 
 repo_cache = RepoCache()
 
@@ -110,34 +110,23 @@ def fetch_repo_contents(repo_url, token=None, include_extensions=None, exclude_e
                 all_content.append((path, file_content))
 
     process_contents()
-    content = "\n\n".join([f"File: {file[0]}\n\n{file[1]}" for file in all_content])
-    repo_cache.set_cached_content(cache_key, content)
+    repo_cache.set_cached_content(cache_key, all_content)
     return all_content
 
-# Embed chunks and question using SentenceTransformer model
-def embed_chunks_and_question(chunks, question):
-    if not chunks:
-        return None, None
-    chunk_embeddings = model_transformer.encode([chunk[1] for chunk in chunks], convert_to_tensor=True, device=device)
-    question_embedding = model_transformer.encode([question], convert_to_tensor=True, device=device)
-    return chunk_embeddings, question_embedding
-
-# Retrieve top-k similar chunks to the question based on cosine similarity
-def get_top_k_similar_chunks(chunk_embeddings, question_embedding, chunks, top_k=3):
-    if chunk_embeddings is None or question_embedding is None:
-        return []
-
-    chunk_embeddings = chunk_embeddings.to(device)
-    question_embedding = question_embedding.to(device)
-
-    similarities = util.pytorch_cos_sim(question_embedding, chunk_embeddings)[0]
-    top_k_indices = similarities.argsort(descending=True)[:top_k]
-    top_chunks = [chunks[idx] for idx in top_k_indices.cpu().numpy()]
-    return top_chunks
-
 # Generate a response using the Gemini AI model
-def generate_response(model, context, question):
-    prompt = f"Based on the following content from the file:\n\n{context}\n\nPlease answer the following question:\n{question}"
+def generate_response(model, context, question, file_name):
+    prompt = f"""You are an AI assistant helping with a GitHub repository.
+Current context:
+- The user has selected the file: {file_name}
+- Content of the file:
+
+{context}
+
+Please answer the following question about this file or the current context:
+{question}
+
+If the question is about the current file or context, answer it directly. If it's a general programming question, you can answer based on your knowledge."""
+
     response = model.generate_content(prompt)
     return response.text
 
@@ -170,6 +159,9 @@ def main():
         file_names = [file[0] for file in st.session_state.repo_contents]
         st.session_state.selected_file = st.sidebar.selectbox("Choose a file:", options=file_names)
 
+        # Display currently selected file
+        st.write(f"Currently selected file: **{st.session_state.selected_file}**")
+
         # Initialize chat history if it doesn't exist
         if "messages" not in st.session_state:
             st.session_state.messages = []
@@ -190,17 +182,12 @@ def main():
 
             if selected_file_content:
                 with st.spinner("Generating response..."):
-                    # Embed the question and file content
-                    chunk_embeddings, question_embedding = embed_chunks_and_question([(st.session_state.selected_file, selected_file_content)], question)
-                    top_chunks = get_top_k_similar_chunks(chunk_embeddings, question_embedding, [(st.session_state.selected_file, selected_file_content)])
-
                     # Generate a response using the Gemini model
-                    if top_chunks:
-                        response = generate_response(gemini_model, top_chunks[0][1], question)
-                        st.session_state.messages.append({"role": "assistant", "content": response})
-                        st.chat_message("assistant").markdown(response)
-                    else:
-                        st.warning("No relevant information found in the selected file.")
+                    response = generate_response(gemini_model, selected_file_content, question, st.session_state.selected_file)
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+                    st.chat_message("assistant").markdown(response)
+            else:
+                st.warning("No file selected or file content not found.")
 
     # Add a footer to the application
     st.sidebar.write("Chatbot powered by Gemini AI")
