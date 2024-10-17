@@ -1,3 +1,4 @@
+
 import streamlit as st
 import requests
 import re
@@ -10,8 +11,6 @@ import numpy as np
 import torch
 from dotenv import load_dotenv
 import ast
-from pythonchunkextractor import PythonChunkExtractor, split_python_content
-
 
 # Load environment variables
 load_dotenv()
@@ -142,10 +141,9 @@ def split_content_into_smart_chunks(content):
         file_name = file_name.replace('File: ', '').strip()
         _, file_extension = os.path.splitext(file_name)
 
-        if file_extension.lower() == '.py':
-            chunks.extend(split_python_content(file_name, file_content))
+        if file_extension.lower() in ['.py', '.js', '.java', '.cpp', '.cs']:  # Add more extensions as needed
+            chunks.extend(split_code_file(file_name, file_content))
         else:
-            # Use existing logic for non-Python files
             chunks.extend(split_text_file(file_name, file_content))
 
     return chunks
@@ -277,55 +275,23 @@ def get_relevant_code_chunks(content, user_question, refined_question, keywords)
     top_chunks = get_top_k_similar_chunks(chunk_embeddings, question_embedding, chunks)
     return top_chunks
 
-# Modified function
+# Updated get_chat_response function
 def get_chat_response(model, question, relevant_chunks):
     context = "\n\n".join(relevant_chunks)
     prompt = f"""
-    You are an AI assistant that answers questions based ONLY on the provided content from a GitHub repository. 
-    Your task is to answer the following question using ONLY the information in the given context. 
-    If the answer cannot be found in the provided content, explicitly state that the information is not available in the given repository content.
+    Based on the following content from the GitHub repository:
 
-    Context from the GitHub repository:
     {context}
 
-    Question: {question}
+    Please answer the following question:
+    {question}
 
-    Please follow these rules:
-    1. Only use information present in the provided context to answer the question.
-    2. If the answer is not in the context, say "The information about [topic] is not available in the given repository content."
-    3. Do not make up or infer information that is not explicitly stated in the context.
-    4. If you use any information from the context, reference the file name it came from.
-
-    Your response:
+    If the answer cannot be directly found in the provided content, use the context to infer a reasonable response or state that the information is not available in the given repository content.
     """
     response = model.generate_content(prompt)
     return response.text
 
-# New function
-def verify_response_relevance(response, relevant_chunks):
-    # Check if the response contains any significant content from the relevant chunks
-    chunk_content = " ".join(relevant_chunks).lower()
-    response_lower = response.lower()
-    
-    # List of phrases indicating the information is not in the repository
-    not_found_phrases = [
-        "is not available in the given repository content",
-        "cannot be found in the provided content",
-        "is not present in the repository",
-        "no information about this in the repository"
-    ]
-    
-    # Check if any of the not_found_phrases are in the response
-    if any(phrase in response_lower for phrase in not_found_phrases):
-        return True  # The response correctly indicates the information is not in the repo
-    
-    # Check if the response contains any significant content from the chunks
-    significant_words = set(word.lower() for word in response.split() if len(word) > 4)
-    matching_words = significant_words.intersection(set(chunk_content.split()))
-    
-    return len(matching_words) > 0  # Return True if there's significant overlap
-
-# Modified function
+# Updated main function
 def main():
     st.title("GitHub Repository Chat with Gemini AI")
 
@@ -376,42 +342,13 @@ def main():
                 refined_prompt = get_refined_prompt(gemini_model, question)
                 refined_question, keywords, pseudo_code = parse_refined_prompt(refined_prompt)
 
-                # Display the refined question and keywords
-                st.subheader("Question Refinement")
-                st.write(f"Refined Question: {refined_question}")
-                st.write(f"Keywords: {', '.join(keywords)}")
-                if pseudo_code:
-                    st.code(pseudo_code, language="python")
-
                 # Get relevant code chunks based on the refined question and keywords
                 relevant_chunks = get_relevant_code_chunks(st.session_state.repo_content, question, refined_question, keywords)
 
-                # Display the relevant chunks
-                st.subheader("Relevant Code Chunks")
-                for i, chunk in enumerate(relevant_chunks, 1):
-                    st.text_area(f"Chunk {i}", chunk, height=150)
-
                 # Generate a chat response using the Gemini AI model, refined question, and relevant chunks
                 chat_response = get_chat_response(gemini_model, refined_question, relevant_chunks)
-                
-                # Display the raw chat response
-                st.subheader("Raw AI Response")
-                st.text_area("Raw Response", chat_response, height=200)
-
-                # Verify response relevance
-                is_relevant = verify_response_relevance(chat_response, relevant_chunks)
-                st.write(f"Response deemed relevant: {is_relevant}")
-
-                if is_relevant:
-                    st.session_state.messages.append({"role": "assistant", "content": chat_response})
-                    st.chat_message("assistant").markdown(chat_response)
-                else:
-                    warning_message = ("I apologize, but I couldn't find relevant information in the repository "
-                                       "to answer your question. The response generated may not be based on the "
-                                       "repository content. Could you please rephrase your question or ask about "
-                                       "something specific to the code in this repository?")
-                    st.session_state.messages.append({"role": "assistant", "content": warning_message})
-                    st.chat_message("assistant").warning(warning_message)
+                st.session_state.messages.append({"role": "assistant", "content": chat_response})
+                st.chat_message("assistant").markdown(chat_response)
         else:
             st.warning("Please fetch a repository first before asking questions.")
 
