@@ -1,10 +1,7 @@
-flask
-PyGithub
-requests
-nltk==3.8.1
-sentence-transformers
-faiss-cpu
-transformers
-torch
-google-generativeai
-Flask-Session
+streamlit==1.24.0
+requests==2.31.0
+google-generativeai==0.3.1
+sentence-transformers==2.2.2
+torch==2.0.1
+python-dotenv==1.0.0
+radon==6.0.1
