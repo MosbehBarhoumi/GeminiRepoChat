@@ -8,6 +8,10 @@ import google.generativeai as genai
 from sentence_transformers import SentenceTransformer, util
 import torch
 from dotenv import load_dotenv
+import ast
+from radon.raw import analyze
+from radon.metrics import h_visit
+from radon.visitors import ComplexityVisitor
 
 # Load environment variables
 load_dotenv()
@@ -130,6 +134,61 @@ If the question is about the current file or context, answer it directly. If it'
     response = model.generate_content(prompt)
     return response.text
 
+def analyze_code(file_content, file_name):
+    # Basic metrics
+    loc = len(file_content.splitlines())
+    
+    # Use radon for more advanced metrics
+    raw_metrics = analyze(file_content)
+    
+    # Count functions and classes
+    try:
+        tree = ast.parse(file_content)
+        function_count = sum(isinstance(node, ast.FunctionDef) for node in ast.walk(tree))
+        class_count = sum(isinstance(node, ast.ClassDef) for node in ast.walk(tree))
+    except SyntaxError:
+        function_count = class_count = "N/A (Syntax Error)"
+    
+    # Calculate cyclomatic complexity
+    try:
+        cv = ComplexityVisitor.from_code(file_content)
+        complexities = [item.complexity for item in cv.functions]
+        avg_complexity = sum(complexities) / len(complexities) if complexities else 0
+    except:
+        avg_complexity = "N/A"
+    
+    # Calculate Halstead metrics
+    try:
+        h_visit_result = h_visit(file_content)
+        halstead_volume = round(h_visit_result.total.volume, 2)
+        halstead_difficulty = round(h_visit_result.total.difficulty, 2)
+    except:
+        halstead_volume = halstead_difficulty = "N/A"
+    
+    # Identify potential code smells
+    code_smells = []
+    if loc > 300:
+        code_smells.append("File might be too long (> 300 lines)")
+    if isinstance(avg_complexity, (int, float)) and avg_complexity > 10:
+        code_smells.append("Average function complexity is high (> 10)")
+    
+    # Instead of using raw_metrics.comment_lines, we'll calculate it manually
+    comment_lines = sum(1 for line in file_content.splitlines() if line.strip().startswith('#'))
+    if comment_lines / loc < 0.1:
+        code_smells.append("Low comment ratio (< 10% of code)")
+    
+    return {
+        "File Name": file_name,
+        "Lines of Code": loc,
+        "Function Count": function_count,
+        "Class Count": class_count,
+        "Average Cyclomatic Complexity": avg_complexity,
+        "Comment Lines": comment_lines,
+        "Logical Lines of Code": raw_metrics.sloc,
+        "Halstead Volume": halstead_volume,
+        "Halstead Difficulty": halstead_difficulty,
+        "Potential Code Smells": code_smells
+    }
 # Main application logic
 def main():
     st.title("GitHub Repository Chat with Gemini AI")
@@ -161,6 +220,40 @@ def main():
 
         # Display currently selected file
         st.write(f"Currently selected file: **{st.session_state.selected_file}**")
+
+        # New code analysis section
+        if st.session_state.selected_file:
+            selected_file_content = next((file[1] for file in st.session_state.repo_contents if file[0] == st.session_state.selected_file), None)
+            if selected_file_content:
+                st.subheader("Code Analysis")
+                try:
+                    analysis_results = analyze_code(selected_file_content, st.session_state.selected_file)
+                    
+                    # Display basic metrics
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Lines of Code", analysis_results["Lines of Code"])
+                    col2.metric("Functions", analysis_results["Function Count"])
+                    col3.metric("Classes", analysis_results["Class Count"])
+                    
+                    # Display complexity metrics
+                    st.write("Complexity Metrics:")
+                    st.write(f"- Average Cyclomatic Complexity: {analysis_results['Average Cyclomatic Complexity']}")
+                    st.write(f"- Halstead Volume: {analysis_results['Halstead Volume']}")
+                    st.write(f"- Halstead Difficulty: {analysis_results['Halstead Difficulty']}")
+                    
+                    # Display code smells
+                    if analysis_results["Potential Code Smells"]:
+                        st.write("Potential Code Smells:")
+                        for smell in analysis_results["Potential Code Smells"]:
+                            st.write(f"- {smell}")
+                    else:
+                        st.write("No significant code smells detected.")
+                    
+                    st.write("Note: These metrics are general indicators. Always consider the context of your specific project when interpreting them.")
+                except SyntaxError:
+                    st.warning("Unable to analyze this file. It may not be a valid Python file or may contain syntax errors.")
+                except Exception as e:
+                    st.error(f"An error occurred during code analysis: {str(e)}")
 
         # Initialize chat history if it doesn't exist
         if "messages" not in st.session_state:
