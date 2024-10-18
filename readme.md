@@ -1,5 +1,9 @@
 # GeminiRepoChat
-[Uploading Screencast from 18 أكتوبر, 2024 CET 09:52:27 ص.webm…]()
+
+
+https://github.com/user-attachments/assets/0b0534b8-e5e3-4db5-91e9-86b9303f7526
+
+
 
 ## Description
 
